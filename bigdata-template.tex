@@ -1,0 +1,196 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{acl2015}
+\usepackage{times}
+\usepackage{url}
+\usepackage{latexsym}
+\usepackage[spanish, activeacute]{babel} %Definir idioma español
+\usepackage[utf8]{inputenc} %Codificacion utf-8
+\usepackage{graphicx}
+\graphicspath{ {images/} }
+
+
+\title{Text Mining en Social Media. 
+Master Big Data 2016-2017}
+
+\author{Silvia Aroca Ortega \\
+  {\tt silvia.aroca@gmail.com} \\}
+
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+
+Este artículo expone la solución propuesta al problema planteado en la asignatura Text Mining en Social Media. 
+La tarea ha consistido en la clasificación de tweets por variedad y sexo utilizando criterios basados en Author Profiling y técnicas de Machine Learning para deducir el género y el país de origen.
+A continuación veremos las estrategias utilizadas y otros posibles planteamientos a ser utilizados con el fin de mejorar el resultado.
+
+\end{abstract}
+
+
+\section{Introducción}
+
+El objeto de estudio de esta tarea es averiguar el perfil del autor de un texto mediante los criterios de clasificación de Sexo (hombre/mujer) y Variedad lingüística (país) de cada autor.
+Nos enfrentamos a una tarea de {\em Author Profiling}, un campo de investigación muy reciente que permite identificar rasgos personales, como la edad, el sexo, la personalidad, el idioma nativo o la variedad regional del idioma de los autores de los textos a partir de su forma de escribir. Tarea que se dificulta cuando nos encontramos con textos cortos y espontáneos como los de las redes sociales e incluso si los idiomas son parecidos entre sí.
+Nuestra tarea se basa en trabajar sobre una base de datos dada, que recoge un corpus compuesto por un listado de usuarios de Twitter con hasta 30.000 tweets de cada uno, todos ellos pertenecientes a países de habla hispana (Argentina, Chile, Colombia, México, Perú, España y Venezuela). Evaluando dicho corpus mediante distintas técnicas basadas el estudio del lenguaje natural y aplicando tres métodos diferentes de algoritmos de clasificación, SVM (Support Vector Machine), Naive Bayes con Cross-Validation y Random Forest, obteniendo así los resultados que veremos más adelante.
+
+
+\section{Dataset}
+
+Para el análisis se dispone de un Dataset, proporcionado por la empresa Autoritas, denominado {\em pan-ap17-bigdata}, que contiene 30.000 tweets de variedad lingüística español (ES) divididos entre 300 autores identificados mediante una secuencia alfanumérica para mantener su anonimato, de los cuales se asignan 200 autores para realizar el entrenamiento (Train) y 100 para el Test. Tal y como presenta la {\em Figura 1}.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=6cm]{Subcorpus_PAN-AP'17}
+\caption{Datos de análisis.} \label{fig:Subcorpus_PAN-AP'17}
+\end{figure}
+
+El Dataset consta de 2 carpetas (Train y Test), dentro de cada una de ellas se encuentran unos ficheros en formato XML, 2.800 y 1.400 respectivamente, donde cada fichero es un autor con sus tweets asociados junto con un fichero "truth.txt" que contiene la lista de títulos de los ficheros xml, el género y país al que corresponden.
+
+Hay que decir que este Dataset con el que vamos a trabajar es un subconjunto de un Dataset más amplio,({\em Figura 2}), que recoge distintos idiomas según su situación geográfica.
+Y que la arquitectura utilizada para la recopilación de datos sigue el esquema representado en la {\em Figura 3}.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=7.2cm]{PAN-AP'17}
+\caption{Dataset original.} \label{fig:PAN-AP'17}
+\end{figure}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=7cm]{Arquitectura}
+\caption{Arquitectura del sistema para la recolección de tweets y usuarios.} \label{fig:Arquitectura}
+\end{figure}
+
+Proceso de construcción del Dataset:
+\begin{itemize}
+  \item Recuperación de tweets enmarcados en una región geográfica  (longitud, latitud, radio). 
+  \item Preseleccionan de los usuarios únicos que han emitido tweets, filtrados por idioma del perfil.
+  \item Recuperación los timelines de los usuarios únicos.
+  \item Selección de los autores con más de 100 tweets, que no sean retweets, en el idioma correspondiente o con la localización geográfica esperada en su perfil.
+  \item Revisión manual de los perfiles para asegurar el sexo.
+  \item Y selección de 100 tweets por autor para la construcción del Dataset final.
+\end{itemize}
+
+Llegados a este punto se preparan los datos para su explotación,  utilizando el {\em lenguaje R} para el tratamiento de los datos.
+
+
+\section{Propuesta del alumno}
+
+En primer lugar antes de centrarnos en una clasificación por sexo o variedad, hemos realizado una limpieza de datos general aplicada a los dos tipos de clasificación. 
+Hemos generado un vocabulario utilizado las funciones que se han proporcionado para recoger los tweets, limpiando el corpus de signos de puntuación, números, espacios en blanco, stopwords (palabras vacías) y términos más frecuentes, a esa limpieza le hemos añadido la eliminación de los acentos mediante la función de R:
+\begin{tabular}{ l c }
+{\em chartr(”áéíóú”,”aeiou”,corpus.preprocessed)} \\
+\end{tabular}\\
+Una vez generado el vocabulario creamos una bolsa de palabras (n=1000) con nuestra limpieza inicial y lanzamos la función. Como resultado obtenemos un gráfico con las palabras que más se repiten, pero como no se puede apreciar, reducimos la bolsa a n=100 y relanzamos para poder visualizarlas tal y como se ve en el gráfico siguiente:
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=7.2cm]{grafico_n100}
+\caption{Las 100 palabras más frecuentes.} \label{fig:grafico_n100}
+\end{figure}
+
+ Como hemos dicho, este gráfico muestra las palabras más utilizadas en los tweets y nos permite ajustar el modelo eliminando las palabras comunes a todas las variedades del español, independientemente del género.
+ Las palabras seleccionadas por el grupo a eliminar son:
+
+\begin{itemize}
+  \item {\em youtube}
+  \item {\em video}
+  \item {\em trump}
+  \item {\em mas}
+  \item Abreviaciones de escritura: {\em q , x y d}
+  \item Onomatopeyas: {\em jajaja}
+\end{itemize}
+
+Para ello utilizamos la siguiente función de R:
+\begin{tabular}{ l c }
+{\em swlist=c(”youtube”, ”video”, ”q”, ”si”,”x”,}\\
+{\em”jajaja”, ”trump”, ”d”, ”mas”)} \\
+\end{tabular}\\
+y generamos un nuevo vocabulario.
+
+A partir de este momento aplicamos los tres modelos algorítmicos de clasificación seleccionados por el grupo, al conjunto de {\em training}, por una parte para sexo y por otra para variedad.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=8cm]{Captura_R}
+\caption{Generación de los datasets de Training y Test para Sexo y Variedad.} \label{fig:Captura_R}
+\end{figure}
+
+Los modelos seleccionados para el estudio son los siguientes:
+
+\begin{tabular}{ l c }
+  SVM (Support Vector Machine) \\
+  Naive Bayes con validación cruzada \\
+  Random Forest \\
+\end{tabular}\\
+
+Los resultados iniciales obtenidos, con la limpieza previa, la eliminación de las palabras más frecuentes y comunes a todas las variedades, y una bolsa de palabras de n=1.000 mejoramos un poco los resultados de {\em Accuracy} proporcionados en clase {\em(Figura 6 y 7)}:
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=4cm]{resultado_dado}
+\caption{Accuracy proporcionado.} \label{fig:resultado_dado}
+\end{figure}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=4cm]{resultado_n=1000}
+\caption{Accuracy n=1.000.} \label{fig:resultado_n=1000}
+\end{figure}
+
+ Con el fin de obtener mejores resultados, decidimos aumentar la bolsa de palabras de n=1.000 a n=2.000
+
+
+\section{Resultados experimentales}
+
+Tras el aumento de la bolsa de palabras obtenemos una mejora de los resultados en todos los métodos utilizados, tal y como muestra la siguiente tabla y gráfico,{\em (Figura 8 y 9).}
+En ella se muestra los valores obtenidos con nuestro {\em training} final, con el que hemos obteniendo mejores resultados que con la bolsa inicial de 1.000 palabras. Destacando el mejor resultado obtenido utilizando el algoritmo de clasificación de {\em Random Forest}.
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=7cm]{tabla_resultados}
+\caption{Accuracy n=2.000.} \label{fig:tabla_resultados}
+\end{figure}
+
+\begin{figure}[htb]
+\centering
+\includegraphics[width=7cm]{grafico_resultados}
+\caption{Gráfico de resultados.} \label{fig:grafico_resultados}
+\end{figure}
+
+\section{Conclusiones y trabajo futuro}
+
+La conclusión a la que hemos llegado es que con una mayor limpieza de los datos y principalmente un aumento de la bolsa de palabras podemos obtener mejores resultados.
+
+En un trabajo futuro se podría definir una limpieza más exhaustiva, tanto por {\em Variedad} como por {\em Sexo}, en esta ocasión por cuestión de tiempo solo hemos podido realizar una limpieza genérica a las 2 clasificaciones juntas, aunque consideramos en el planteamiento previo de la actividad otras acciones como:
+
+\begin{itemize}
+  \item Discretizar entre palabras más utilizadas comúnmente por mujeres que por hombres y viceversa.
+  \item Diferencias lingüísticas dentro de la Variedad:
+        \begin{itemize}
+        \item El uso de distintas modalidades de {\em voseo} característico del Cono Sur, especialmente de Argentina y Uruguay, Centroamérica y ciertas zonas de Colombia y Venezuela. El mismo es inexistente en España.
+        \item Uso diferente de diminutivos, los terminados en {\em -illo, -ete e -ín} son propios de España, mientras que en paises como Venezuela y Colombia este diminutivo se usa solo en las palabras terminadas en {\em -te, -ta y -to}. 
+        \item El uso del sistema pronominal para la segunda persona del plural, en España se diferencia entre "vosotros" (confianza) y "ustedes" (respeto) y sus respectivas formas verbales y pronominales mientas que en Latinoamérica solo se usa "ustedes", sin diferenciar entre la confianza y el respeto en el plural.
+        \item En Latinoamérica se prefiere la perífrasis de futuro {\em ir a + infinitivo}, y en España se usa comparativamente más la conjugación del futuro.
+        \item Uso de {\em arcaísmos} como "pararse" (Latinoamérica) por "ponerse de pie" (España) y de {\em marinerismos} como "virar" por "girar" y "dar la vuelta" o "doblar".
+        \end{itemize}
+  \item Estilística en la puntuación dentro de la Variedad:
+        \begin{itemize}
+        \item En España se usan preferentemente las comillas «latinas», al igual que en francés («»), mientras que en Latinoamérica se utilizan las comillas dobles (") o simples (') como las inglesas, sin embargo, no hay variaciones normativas respecto a su empleo.
+        \item En algunos países de Latinoamérica, especialmente en México, se emplea el punto como separador decimal en lugar de la coma, del mismo modo que en inglés.
+        \end{itemize}
+  \item Crear nuevas funciones para el procesado de datos, como por ejemplo eliminar palabras de una única consonante.
+  \item Probar con nuevos algoritmos de clasificación.
+ \end{itemize}
+ 
+ Finalmente, y si se dispone de tiempo, ir realizando ampliaciones de la bolsa de palabras , ya que como hemos detectado proporcionan un mejora notable en los resultados, aunque posee el inconveniente de necesitar un mayor tiempo de procesado.
+
+\begin{thebibliography}{}
+
+\newblock Apuntes asignatura:{\em Text Mining en Social Media}
+\newblock Paolo Rosso y Francisco Rangel.
+
+\end{thebibliography}
+
+\end{document}
